@@ -1,0 +1,314 @@
+openapi: 3.1.0
+info:
+  title: Shiftly Leave Requests
+  version: 0.1.0
+  description: >-
+    Hợp đồng tính năng xin nghỉ. Mọi đường dẫn cần phiên đăng nhập; quyền được kiểm tra
+    tại server theo người dùng và cửa hàng. Các thao tác ghi qua cookie cần bảo vệ CSRF.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+paths:
+  /leave-types:
+    get:
+      summary: Xem loại nghỉ đang hoạt động; admin có thể yêu cầu xem cả loại ngừng hoạt động
+      parameters:
+        - in: query
+          name: include_inactive
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Danh sách loại nghỉ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LeaveType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      summary: Admin tạo loại nghỉ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveTypeInput' }
+      responses:
+        '201':
+          description: Loại nghỉ mới
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /leave-types/{id}:
+    patch:
+      summary: Admin sửa hoặc ngừng sử dụng loại nghỉ
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1 }
+                is_paid: { type: boolean }
+                requires_attachment: { type: boolean }
+                is_active: { type: boolean }
+      responses:
+        '200':
+          description: Loại nghỉ sau sửa
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /leave-requests:
+    get:
+      summary: Xem đơn của mình hoặc, với quản lý/admin, đơn thuộc cửa hàng được phép
+      description: >-
+        Nhân viên không truyền store_id sẽ nhận đơn của mình. Quản lý cần store_id thuộc
+        phạm vi quyền; admin có thể chọn bất kỳ store_id. Không trả khóa tệp riêng tư.
+      parameters:
+        - in: query
+          name: store_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/LeaveStatus' }
+        - in: query
+          name: from_date
+          schema: { type: string, format: date }
+        - in: query
+          name: to_date
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Danh sách đơn trong phạm vi quyền
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LeaveRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Invalid' }
+    post:
+      summary: Nhân viên gửi đơn cho cửa hàng mình đang làm
+      description: user_id được lấy từ phiên, không nhận từ biểu mẫu.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [store_id, leave_type_id, start_date, end_date, reason]
+              properties:
+                store_id: { type: string, format: uuid }
+                leave_type_id: { type: string, format: uuid }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                reason: { type: string, minLength: 1 }
+                attachment:
+                  type: string
+                  format: binary
+                  description: Một tệp PDF, JPEG hoặc PNG, tối đa 4 MB.
+      responses:
+        '201':
+          description: Đơn chờ duyệt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /leave-requests/{id}:
+    get:
+      summary: Xem chi tiết đơn trong phạm vi quyền
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Chi tiết đơn
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /leave-requests/{id}/cancel:
+    post:
+      summary: Người gửi hủy đơn còn được phép
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Đơn đã hủy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /leave-requests/{id}/review:
+    post:
+      summary: Quản lý đúng cửa hàng hoặc admin duyệt/từ chối đơn chờ
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approved, rejected] }
+                review_note:
+                  type: string
+                  description: Bắt buộc và không rỗng khi decision là rejected.
+      responses:
+        '200':
+          description: Đơn sau quyết định
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /leave-requests/{id}/impact:
+    get:
+      summary: Người có quyền xét duyệt xem ca có thể bị ảnh hưởng
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Ca giao khoảng ngày nghỉ; rỗng nếu chưa có lịch
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [affected_assignments]
+                properties:
+                  affected_assignments:
+                    type: array
+                    items:
+                      type: object
+                      required: [assignment_id, work_date, start_at, end_at]
+                      properties:
+                        assignment_id: { type: string, format: uuid }
+                        work_date: { type: string, format: date }
+                        start_at: { type: string, format: date-time }
+                        end_at: { type: string, format: date-time }
+                        schedule_status: { type: string, enum: [draft, published, archived] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /leave-requests/{id}/attachment:
+    get:
+      summary: Tải tệp qua kiểm tra quyền của đơn
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Nội dung tệp; Cache-Control private, no-store
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Tên cookie thực tế do tính năng nền tảng xác định.
+  parameters:
+    Id:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    LeaveStatus: { type: string, enum: [pending, approved, rejected, cancelled] }
+    LeaveTypeInput:
+      type: object
+      additionalProperties: false
+      required: [name, is_paid, requires_attachment]
+      properties:
+        name: { type: string, minLength: 1 }
+        is_paid: { type: boolean }
+        requires_attachment: { type: boolean }
+    LeaveType:
+      allOf:
+        - $ref: '#/components/schemas/LeaveTypeInput'
+        - type: object
+          required: [id, is_active]
+          properties:
+            id: { type: string, format: uuid }
+            is_active: { type: boolean }
+    LeaveRequest:
+      type: object
+      required: [id, user_id, store_id, leave_type_id, start_date, end_date, reason, status, has_attachment, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        store_id: { type: string, format: uuid }
+        leave_type_id: { type: string, format: uuid }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        reason: { type: string }
+        status: { $ref: '#/components/schemas/LeaveStatus' }
+        has_attachment: { type: boolean }
+        reviewed_by: { type: [string, 'null'], format: uuid }
+        reviewed_at: { type: [string, 'null'], format: date-time }
+        review_note: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+  responses:
+    Unauthorized:
+      description: Chưa đăng nhập
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Không đủ quyền cho thao tác
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Không tìm thấy trong phạm vi được phép
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Trạng thái đã thay đổi hoặc đơn giao ngày với đơn còn hiệu lực
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    TooLarge:
+      description: Tệp vượt giới hạn 4 MB
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Invalid:
+      description: Dữ liệu không hợp lệ
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

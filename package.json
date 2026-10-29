@@ -1,0 +1,36 @@
+{
+  "name": "shiftly",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed:admin": "tsx src/db/seed/admin.ts",
+    "db:seed:leave": "tsx src/db/seed/leave-types.ts",
+    "db:seed:scheduling-demo": "tsx src/db/seed/scheduling-demo.ts",
+    "attachments:cleanup": "tsx scripts/cleanup-attachments.ts"
+  },
+  "dependencies": {
+    "@next/env": "^16.4.3",
+    "drizzle-orm": "^0.45.4",
+    "next": "^16.4.3",
+    "pg": "^8.16.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "drizzle-kit": "^0.31.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

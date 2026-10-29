@@ -20,6 +20,7 @@ lib-cov
 
 # Coverage directory used by tools like istanbul
 coverage
+!src/app/api/stores/*/coverage/
 *.lcov
 
 # nyc test coverage
@@ -39,6 +40,8 @@ build/Release
 
 # Dependency directories
 node_modules/
+data/
+build/
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)
@@ -124,6 +127,12 @@ dist
 
 # Stores Visual Studio Code versions used for testing Visual Studio Code extensions
 .vscode-test
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
 
 # pnpm
 .pnpm-store

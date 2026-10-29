@@ -1,0 +1,20 @@
+"use client";
+import { useEffect,useState } from "react";
+import { api } from "../lib/api";
+
+type Store={id:string;code:string;name:string;timezone:string;is_active:boolean};
+type Position={id:string;name:string;color:string|null;is_active:boolean};
+type User={id:string;email:string|null;phone:string|null;full_name:string|null;status:string};
+export default function AdminPage(){
+  const [stores,setStores]=useState<Store[]>([]),[positions,setPositions]=useState<Position[]>([]),[users,setUsers]=useState<User[]>([]),[code,setCode]=useState(""),[storeName,setStoreName]=useState(""),[positionName,setPositionName]=useState(""),[managerUser,setManagerUser]=useState(""),[managerStore,setManagerStore]=useState(""),[message,setMessage]=useState("");
+  const refresh=async()=>{const [s,p,u]=await Promise.all([api<Store[]>("/api/foundation/stores"),api<Position[]>("/api/foundation/positions"),api<User[]>("/api/foundation/users")]);setStores(s);setPositions(p);setUsers(u);};
+  useEffect(()=>{refresh().catch((err:Error)=>setMessage(err.message));},[]);
+  const act=async(work:()=>Promise<unknown>)=>{try{await work();await refresh();setMessage("Đã lưu");}catch(err){setMessage((err as Error).message);}};
+  return <main><h1>Quản trị nền tảng</h1>{message&&<p>{message}</p>}
+    <div className="grid"><section className="card"><h2>Tạo cửa hàng</h2><form onSubmit={(event)=>{event.preventDefault();void act(()=>api("/api/foundation/stores","POST",{code,name:storeName,timezone:"Asia/Ho_Chi_Minh"}));}}><label>Mã</label><input value={code} onChange={(e)=>setCode(e.target.value)} required/><label>Tên</label><input value={storeName} onChange={(e)=>setStoreName(e.target.value)} required/><button>Tạo</button></form></section>
+    <section className="card"><h2>Tạo vị trí</h2><form onSubmit={(event)=>{event.preventDefault();void act(()=>api("/api/foundation/positions","POST",{name:positionName}));}}><label>Tên vị trí</label><input value={positionName} onChange={(e)=>setPositionName(e.target.value)} required/><button>Tạo</button></form></section>
+    <section className="card"><h2>Gán quản lý</h2><form onSubmit={(event)=>{event.preventDefault();void act(()=>api(`/api/foundation/stores/${managerStore}/managers/${managerUser}`,"PUT"));}}><label>Cửa hàng</label><select value={managerStore} onChange={(e)=>setManagerStore(e.target.value)} required><option value="">Chọn cửa hàng</option>{stores.filter((s)=>s.is_active).map((s)=><option key={s.id} value={s.id}>{s.name}</option>)}</select><label>Người dùng</label><select value={managerUser} onChange={(e)=>setManagerUser(e.target.value)} required><option value="">Chọn người dùng</option>{users.filter((u)=>u.status==="active").map((u)=><option key={u.id} value={u.id}>{u.full_name??u.email??u.phone}</option>)}</select><div className="row"><button>Gán quản lý</button><button type="button" className="secondary" disabled={!managerStore||!managerUser} onClick={()=>void act(()=>api(`/api/foundation/stores/${managerStore}/managers/${managerUser}`,"DELETE"))}>Thu hồi</button></div></form></section></div>
+    <h2>Cửa hàng</h2><div className="scroll"><table><thead><tr><th>Mã</th><th>Tên</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{stores.map((s)=><tr key={s.id}><td>{s.code}</td><td><a href={`/stores/${s.id}`}>{s.name}</a></td><td>{s.is_active?"Hoạt động":"Ngừng sử dụng"}</td><td><button className="secondary" onClick={()=>void act(()=>api(`/api/foundation/stores/${s.id}`,"PATCH",{is_active:!s.is_active}))}>{s.is_active?"Ngừng":"Mở lại"}</button></td></tr>)}</tbody></table></div>
+    <h2>Vị trí</h2><div className="scroll"><table><thead><tr><th>Tên</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{positions.map((p)=><tr key={p.id}><td>{p.name}</td><td>{p.is_active?"Hoạt động":"Ngừng sử dụng"}</td><td><button className="secondary" onClick={()=>void act(()=>api(`/api/foundation/positions/${p.id}`,"PATCH",{is_active:!p.is_active}))}>{p.is_active?"Ngừng":"Mở lại"}</button></td></tr>)}</tbody></table></div>
+  </main>;
+}

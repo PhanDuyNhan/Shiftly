@@ -1,0 +1,15 @@
+"use client";
+import { useEffect,useState } from "react";
+import { useParams } from "next/navigation";
+import { api } from "../../../../lib/api";
+type Schedule={id:string;status:string;version:number;week_start:string;slots:{id:string}[]}|null;
+type Coverage={slot_id:string;work_date:string;min_count:number;ideal_count:number;assigned_count:number;qualified_count:number;available_count:number;interested_count:number};
+function monday(){const d=new Date();d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7+7);return d.toISOString().slice(0,10);}
+export default function StoreSchedules(){
+  const storeId=useParams<{storeId:string}>().storeId;const [week,setWeek]=useState(monday()),[schedule,setSchedule]=useState<Schedule>(null),[coverage,setCoverage]=useState<Coverage[]>([]),[message,setMessage]=useState("");
+  const refresh=async()=>{const [s,c]=await Promise.all([api<Schedule>(`/api/stores/${storeId}/schedules?week=${week}`),api<Coverage[]>(`/api/stores/${storeId}/coverage?week=${week}`)]);setSchedule(s);setCoverage(c);};
+  useEffect(()=>{refresh().catch((err:Error)=>setMessage(err.message));},[storeId,week]);
+  return <main><p><a href={`/stores/${storeId}`}>← Cửa hàng</a></p><p className="eyebrow">Quản lý lịch ca</p><h1>Lịch tuần</h1><p className="page-intro">Chọn tuần để xem nhu cầu và tình trạng phân công.</p><div className="card"><label htmlFor="week-start">Tuần bắt đầu Thứ 2</label><input id="week-start" style={{maxWidth:230}} type="date" value={week} onChange={(e)=>setWeek(e.target.value)}/>{message&&<p role="alert" className="notice error">{message}</p>}</div>
+    {schedule?<div className="card"><div className="row"><h2 style={{margin:0}}>Lịch {schedule.week_start}</h2><span className={`status status-${schedule.status}`}>{schedule.status==="published"?"Đã công bố":"Bản nháp"}</span></div><p className="muted">Phiên bản {schedule.version} · {schedule.slots.length} ca cần xếp</p><a className="button-link" href={`/stores/${storeId}/schedules/${schedule.id}`}>Mở lịch →</a></div>:<div className="empty-state"><strong>Chưa có lịch tuần này</strong><p>Tạo lịch nháp từ ca mẫu và nhu cầu nhân sự đã khai báo.</p><button onClick={async()=>{try{await api(`/api/stores/${storeId}/schedules`,"POST",{week_start:week});await refresh();}catch(err){setMessage((err as Error).message);}}}>Tạo lịch nháp →</button></div>}
+    <div className="section-heading"><h2>Độ phủ nhân sự</h2></div>{coverage.length===0?<div className="empty-state"><strong>Chưa có ca để tổng hợp</strong><p>Tạo lịch nháp để xem số nhân viên khả dụng theo ca.</p></div>:<div className="scroll"><table><thead><tr><th>Ngày</th><th>Tối thiểu</th><th>Lý tưởng</th><th>Đã xếp</th><th>Đủ kỹ năng</th><th>Khả dụng</th><th>Muốn làm</th></tr></thead><tbody>{coverage.map((row)=><tr key={row.slot_id}><td>{row.work_date}</td><td>{row.min_count}</td><td>{row.ideal_count}</td><td><span className={`status ${row.assigned_count<row.min_count?"status-pending":"status-approved"}`}>{row.assigned_count}</span></td><td>{row.qualified_count}</td><td>{row.available_count}</td><td>{row.interested_count}</td></tr>)}</tbody></table></div>}</main>;
+}

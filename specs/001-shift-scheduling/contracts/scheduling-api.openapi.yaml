@@ -1,0 +1,244 @@
+openapi: 3.1.0
+info:
+  title: Shiftly Weekly Scheduling API
+  version: 0.1.0
+  description: API cho lịch tuần; xác thực phiên từ spec nền tảng. Mọi ghi dữ liệu qua cookie phải kiểm tra CSRF.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+paths:
+  /me/availability-rules:
+    get:
+      summary: Đọc quy tắc khả dụng của chính mình
+      responses:
+        '200': {description: Danh sách quy tắc}
+        '401': {description: Chưa đăng nhập}
+    put:
+      summary: Thay toàn bộ quy tắc khả dụng của chính mình
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rules]
+              properties:
+                rules:
+                  type: array
+                  items: {$ref: '#/components/schemas/AvailabilityRule'}
+      responses:
+        '200': {description: Đã lưu}
+        '400': {description: Khoảng giờ hoặc ngày không hợp lệ}
+        '401': {description: Chưa đăng nhập}
+  /me/availability-exceptions:
+    get:
+      summary: Đọc ngoại lệ của chính mình trong khoảng ngày
+      parameters:
+        - {name: from, in: query, required: true, schema: {type: string, format: date}}
+        - {name: to, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200': {description: Danh sách ngoại lệ}
+    post:
+      summary: Thêm ngoại lệ bận hoặc rảnh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AvailabilityException'}
+      responses:
+        '201': {description: Đã tạo}
+        '400': {description: Khoảng giờ không hợp lệ}
+  /me/availability-exceptions/{exceptionId}:
+    delete:
+      summary: Xóa ngoại lệ của chính mình
+      parameters:
+        - {$ref: '#/components/parameters/ExceptionId'}
+      responses:
+        '204': {description: Đã xóa}
+        '403': {description: Không thuộc người gọi}
+        '404': {description: Không tìm thấy}
+  /me/shift-preferences:
+    get:
+      summary: Đọc nguyện vọng của chính mình trong tuần
+      parameters:
+        - {$ref: '#/components/parameters/Week'}
+      responses:
+        '200': {description: Danh sách nguyện vọng và hạn đăng ký}
+    put:
+      summary: Thay nguyện vọng của chính mình trong tuần trước hạn
+      parameters:
+        - {$ref: '#/components/parameters/Week'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preferences]
+              properties:
+                preferences:
+                  type: array
+                  items: {$ref: '#/components/schemas/Preference'}
+      responses:
+        '200': {description: Đã lưu}
+        '403': {description: Không có tư cách nhân viên ở cửa hàng gốc}
+        '409': {description: Đã qua hạn đăng ký}
+  /me/schedule:
+    get:
+      summary: Lịch đã công bố hiện hành của chính mình
+      parameters:
+        - {$ref: '#/components/parameters/Week'}
+      responses:
+        '200': {description: Chỉ trả ca assigned của chính mình và phiên bản công bố}
+        '401': {description: Chưa đăng nhập}
+  /stores/{storeId}/schedules:
+    get:
+      summary: Đọc lịch tuần của cửa hàng trong phạm vi quản lý
+      parameters:
+        - {$ref: '#/components/parameters/StoreId'}
+        - {$ref: '#/components/parameters/Week'}
+      responses:
+        '200': {description: Lịch hiện hành hoặc rỗng}
+        '403': {description: Ngoài quyền cửa hàng}
+    post:
+      summary: Tạo lịch nháp và sinh slot từ nhu cầu đã cấu hình
+      parameters:
+        - {$ref: '#/components/parameters/StoreId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [week_start]
+              properties:
+                week_start: {type: string, format: date, description: Thứ 2 địa phương}
+      responses:
+        '201': {description: Đã tạo draft với slot và version 1}
+        '403': {description: Ngoài quyền cửa hàng}
+        '409': {description: Đã có lịch hiện hành cho tuần}
+  /stores/{storeId}/coverage:
+    get:
+      summary: Tổng hợp người khả dụng/nguyện vọng và nhu cầu theo slot
+      parameters:
+        - {$ref: '#/components/parameters/StoreId'}
+        - {$ref: '#/components/parameters/Week'}
+      responses:
+        '200': {description: Số liệu tổng hợp theo ngày, ca, vị trí; không lộ lịch cửa hàng khác}
+        '403': {description: Ngoài quyền cửa hàng}
+  /schedules/{scheduleId}/auto-assign:
+    post:
+      summary: Xếp lại draft bằng greedy, giữ ca pinned
+      parameters:
+        - {$ref: '#/components/parameters/ScheduleId'}
+      responses:
+        '200': {description: Draft, schedule_run, slot thiếu và lý do}
+        '403': {description: Ngoài quyền cửa hàng}
+        '409': {description: Không phải draft hoặc ca pinned xung đột}
+  /schedules/{scheduleId}/validate:
+    post:
+      summary: Kiểm tra H1-H9 trên dữ liệu mới nhất
+      parameters:
+        - {$ref: '#/components/parameters/ScheduleId'}
+      responses:
+        '200': {description: Danh sách vi phạm và slot thiếu; thiếu người hợp lệ là cảnh báo, không phải vi phạm cứng}
+        '403': {description: Ngoài quyền cửa hàng}
+  /schedules/{scheduleId}/publish:
+    post:
+      summary: Công bố draft hợp lệ
+      parameters:
+        - {$ref: '#/components/parameters/ScheduleId'}
+      responses:
+        '200': {description: Lịch published với published_at/by}
+        '409': {description: Ràng buộc cứng vi phạm hoặc trạng thái đã đổi}
+  /schedules/{scheduleId}/revisions:
+    get:
+      summary: Lịch sử phiên bản đã công bố cho quản lý/admin
+      parameters:
+        - {$ref: '#/components/parameters/ScheduleId'}
+      responses:
+        '200': {description: Version, người sửa, thời điểm, lý do, snapshot có quyền}
+        '403': {description: Ngoài quyền cửa hàng}
+  /slots/{slotId}/assignments:
+    post:
+      summary: Thêm người vào slot; lịch published yêu cầu lý do và tạo revision
+      parameters:
+        - {name: slotId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, expected_version]
+              properties:
+                user_id: {type: string, format: uuid}
+                expected_version: {type: integer, minimum: 1}
+                reason: {type: string, description: Bắt buộc nếu lịch đã published}
+      responses:
+        '201': {description: Phân công mới và version hiện hành}
+        '400': {description: Dữ liệu sai hoặc thiếu lý do}
+        '403': {description: Ngoài quyền cửa hàng}
+        '409': {description: Version cũ, slot đầy hoặc vi phạm ràng buộc cứng}
+  /assignments/{assignmentId}:
+    patch:
+      summary: Chỉnh phân công; lịch published yêu cầu lý do và tạo revision
+      parameters:
+        - {name: assignmentId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_version, action]
+              properties:
+                expected_version: {type: integer, minimum: 1}
+                action: {type: string, enum: [reassign, unassign, pin, unpin]}
+                user_id: {type: string, format: uuid, description: Bắt buộc với reassign}
+                reason: {type: string, description: Bắt buộc nếu lịch đã published}
+      responses:
+        '200': {description: Phân công/lịch hiện hành và version mới nếu sửa published}
+        '400': {description: Thiếu lý do hoặc dữ liệu sai}
+        '403': {description: Ngoài quyền cửa hàng}
+        '409': {description: Version cũ hoặc vi phạm ràng buộc cứng}
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: shiftly_session
+  parameters:
+    StoreId: {name: storeId, in: path, required: true, schema: {type: string, format: uuid}}
+    ScheduleId: {name: scheduleId, in: path, required: true, schema: {type: string, format: uuid}}
+    ExceptionId: {name: exceptionId, in: path, required: true, schema: {type: string, format: uuid}}
+    Week: {name: week, in: query, required: true, schema: {type: string, format: date, description: Thứ 2 địa phương}}
+  schemas:
+    AvailabilityRule:
+      type: object
+      required: [weekday, start_time, end_time, kind, valid_from]
+      properties:
+        weekday: {type: integer, minimum: 1, maximum: 7}
+        start_time: {type: string, format: time}
+        end_time: {type: string, format: time}
+        kind: {type: string, enum: [busy, available]}
+        valid_from: {type: string, format: date}
+        valid_to: {type: string, format: date}
+        reason: {type: string}
+    AvailabilityException:
+      type: object
+      required: [on_date, kind]
+      properties:
+        on_date: {type: string, format: date}
+        start_time: {type: [string, 'null'], format: time, description: Cả hai null nghĩa là cả ngày}
+        end_time: {type: [string, 'null'], format: time}
+        kind: {type: string, enum: [busy, available]}
+        reason: {type: string}
+    Preference:
+      type: object
+      required: [work_date, shift_template_id, preference]
+      properties:
+        work_date: {type: string, format: date}
+        shift_template_id: {type: string, format: uuid}
+        preference: {type: integer, enum: [-1, 1, 2]}

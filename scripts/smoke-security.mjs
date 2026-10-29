@@ -1,0 +1,30 @@
+import assert from "node:assert/strict";
+import {randomBytes} from "node:crypto";
+const base=process.env.SMOKE_BASE_URL??"http://localhost:3000";
+if(!process.env.SMOKE_EMAIL||!process.env.SMOKE_PASSWORD)throw new Error("Set SMOKE_EMAIL and SMOKE_PASSWORD");
+class Client{cookie="";csrf="";async request(path,method="GET",body,expected=200,includeCsrf=true){const response=await fetch(base+path,{method,headers:{...(method==="GET"?{}:{origin:base,...(includeCsrf?{"x-csrf-token":this.csrf}:{})}),...(body===undefined?{}:{"content-type":"application/json"}),...(this.cookie?{cookie:this.cookie}:{})},body:body===undefined?undefined:JSON.stringify(body)});const data=await response.json();assert.equal(response.status,expected,`${method} ${path}: ${JSON.stringify(data)}`);const set=response.headers.getSetCookie();if(set.length){const cookies=Object.fromEntries(set.map((value)=>value.split(";")[0].split("=")));this.cookie=Object.entries(cookies).map(([key,value])=>`${key}=${value}`).join("; ");this.csrf=cookies.csrf??this.csrf;}return data;}}
+async function signIn(email,password){const c=new Client();await c.request("/api/auth/login","POST",{identifier:email,password});await c.request("/api/auth/change-password","POST",{old_password:password,new_password:`Secure-${randomBytes(20).toString("base64url")}`});return c;}
+const suffix=randomBytes(4).toString("hex"),admin=await signIn(process.env.SMOKE_EMAIL,process.env.SMOKE_PASSWORD);
+const storeA=await admin.request("/api/foundation/stores","POST",{code:`A${suffix}`,name:`Security A ${suffix}`},201);
+const storeB=await admin.request("/api/foundation/stores","POST",{code:`B${suffix}`,name:`Security B ${suffix}`},201);
+const manager=await admin.request(`/api/foundation/stores/${storeA.id}/employees`,"POST",{email:`security-manager-${suffix}@shiftly.test`,full_name:"Security Manager"},201);
+await admin.request(`/api/foundation/stores/${storeA.id}/managers/${manager.id}`,"PUT");
+const otherManager=await admin.request(`/api/foundation/stores/${storeA.id}/employees`,"POST",{email:`security-other-manager-${suffix}@shiftly.test`,full_name:"Other Manager"},201);
+await admin.request(`/api/foundation/stores/${storeA.id}/managers/${otherManager.id}`,"PUT");
+const staff=await admin.request(`/api/foundation/stores/${storeA.id}/employees`,"POST",{email:`security-staff-${suffix}@shiftly.test`,full_name:"Security Staff"},201);
+const reviewer=await signIn(manager.email,manager.temporary_password),otherReviewer=await signIn(otherManager.email,otherManager.temporary_password),employee=await signIn(staff.email,staff.temporary_password);
+await reviewer.request(`/api/foundation/stores/${storeB.id}/employees`,"GET",undefined,403);
+await reviewer.request(`/api/leave-requests?store_id=${storeB.id}`,"GET",undefined,403);
+await employee.request(`/api/foundation/stores/${storeA.id}/employees`,"GET",undefined,403);
+await reviewer.request(`/api/foundation/stores/${storeA.id}/shift-templates`,"POST",{name:"Denied",start_time:"09:00",end_time:"17:00"},403,false);
+await reviewer.request(`/api/foundation/stores/${storeA.id}/employees/${staff.id}/status`,"POST",{status:"locked"});
+await employee.request("/api/me","GET",undefined,401);
+await reviewer.request(`/api/foundation/stores/${storeA.id}/employees/${staff.id}/status`,"POST",{status:"active"});
+await reviewer.request(`/api/foundation/stores/${storeA.id}/employees/${staff.id}/status`,"POST",{status:"left"});
+await employee.request("/api/me","GET",undefined,401);
+await otherReviewer.request(`/api/foundation/stores/${storeA.id}/employees/${staff.id}/restore`,"POST",undefined,403);
+await reviewer.request(`/api/foundation/stores/${storeA.id}/employees/${staff.id}/restore`,"POST");
+const restored=await reviewer.request(`/api/foundation/stores/${storeA.id}/employees/${staff.id}`);assert.equal(restored.status,"active");
+await admin.request(`/api/foundation/stores/${storeA.id}/managers/${manager.id}`,"DELETE");
+await reviewer.request(`/api/foundation/stores/${storeA.id}/employees`,"GET",undefined,403);
+console.log("Security smoke passed: cross-store denial, employee role, CSRF, lock/leave/restore, manager revocation");
